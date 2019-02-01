@@ -93,11 +93,11 @@ def fit(model, data, device, output):
 
         # Validation
         tr_loss, tr_acc = eval_model(model, train_loader, device)
-        train_history['train_loss'].append(tr_loss)
+        train_history['train_loss'].append(tr_loss.item())
         train_history['train_acc'].append(tr_acc)
 
         val_loss, val_acc = eval_model(model, valid_loader, device, debug=True)
-        train_history['val_loss'].append(val_loss)
+        train_history['val_loss'].append(val_loss.item())
         train_history['val_acc'].append(val_acc)
 
         # save best validation model
@@ -210,7 +210,7 @@ def main():
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--mode', type=str, default='test')
     parser.add_argument('--gpu', type=int, required=True)
-    parser.add_argument('--output', default='/data/pmmf/signer_independent/cnn_dataAug')
+    parser.add_argument('--output', default='./output_cnn/')
 
     args = parser.parse_args()
 

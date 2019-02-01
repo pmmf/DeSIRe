@@ -33,43 +33,36 @@ def triplet_loss(anchor, positive, negative, ALPHA=1.0):
     return loss
 
 
-# TODO : put different hyperparameters
-def twins_reg(z, z_mean, z_log_var, z_mean2, z_log_var2, h1):
-    sim_loss_cvae = torch.mean(kl_div(z_mean, z_log_var, z_mean2, z_log_var2),
-                               dim=0)
-    # sim_loss_cvae = torch.mean((z_mean - z_mean2)**2)  # TODO: KL divergence
-    # sim_loss_cnn = torch.mean((z_mean.detach() - h1)**2)
-    sim_loss_cnn = torch.mean((z.detach() - h1)**2)
-    return sim_loss_cvae + sim_loss_cnn
-
-
 def twins_loss(x, y,
                x_reconst, z_mean, z_log_var, z,
                z_mean2, z_log_var2,
                h1, y_pred,
                kl_weight=1e-03,
-               cvae_reg=1e-03,
-               cnn_reg=1,
+               cvae_weight=1e-03,
+               class_weight=1,
                t_reg=1e-03):
 
-    # loss of main cvae
+    # CVAE loss
     (cvae_loss,
      cvae_reconst_loss,
-     cvae_kl_loss) = vae_loss(x, x_reconst, z_mean, z_log_var,
-                              kl_weight=kl_weight)
+     cvae_kl_prior) = vae_loss(x, x_reconst, z_mean, z_log_var,
+                               kl_weight=kl_weight)
 
-    # cvae_loss_tuple = (cvae_loss, cvae_reconst_loss, cvae_kl_loss)
+    cvae_kl_ids = torch.mean(kl_div(z_mean, z_log_var, z_mean2, z_log_var2),
+                             dim=0)
 
-    # cnn loss
-    loss_cnn = cross_entropy_loss(y_pred, y)
+    cvae_loss += kl_weight*cvae_kl_ids
 
-    # twins reg
-    reg_loss = twins_reg(z, z_mean, z_log_var, z_mean2, z_log_var2, h1)
+    # classification loss
+    class_loss = cross_entropy_loss(y_pred, y)
+
+    # classification embeddings loss
+    class_emb_loss = torch.mean((z.detach() - h1)**2)
 
     # total loss
-    loss = cvae_reg*cvae_loss + cnn_reg*loss_cnn + t_reg*reg_loss
+    loss = cvae_weight*cvae_loss + class_weight*class_loss + t_reg*class_emb_loss
 
-    return loss, cvae_loss, loss_cnn, reg_loss
+    return loss, cvae_loss, cvae_reconst_loss, cvae_kl_prior, cvae_kl_ids, class_loss, class_emb_loss
 
 
 def vae_loss(x, x_reconstructed, z_mean, z_log_var, kl_weight=1e-03):
@@ -77,8 +70,8 @@ def vae_loss(x, x_reconstructed, z_mean, z_log_var, kl_weight=1e-03):
     reconst_loss = torch.mean((x_reconstructed - x)**2)
 
     # KL loss
-    kl_loss = torch.mean(- 0.5 * torch.sum(1 + z_log_var - z_mean**2 -
-                         torch.exp(z_log_var), dim=1), dim=0)
+    kl_loss = -.5*torch.mean(torch.mean(1 + z_log_var - z_mean**2 -
+                                        torch.exp(z_log_var), dim=1), dim=0)
 
     # VAE loss
     loss = reconst_loss + kl_weight * kl_loss
