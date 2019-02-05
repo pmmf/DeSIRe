@@ -12,7 +12,7 @@ import copy
 
 
 def tsne(model, data_loader, device, plot_fn=None):
-    markers = ['.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', '8', 's', 'p']
+    markers = ['.', 'v', '1', 'p', 'P', '*', 'X', '8', '+', 'x', 'd', '|', 's', '>']
     colors = ['black', 'red', 'blue', 'green', 'orange', 'fuchsia', 'lime', 'peru', 'cyan', 'rosybrown']
 
     from sklearn import manifold
