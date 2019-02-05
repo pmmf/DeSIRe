@@ -559,8 +559,12 @@ def main():
         results.append((test_loss.item(), test_acc))
 
         # TSNE maps
+        # on train
+        tsne(model.cvae, train_loader, device,
+             plot_fn=os.path.join(*(output_fn, 'tsne_train.png')))
+        # on test
         tsne(model.cnn, test_loader, device,
-             plot_fn=os.path.join(*(output_fn, 'tsne.png')))
+             plot_fn=os.path.join(*(output_fn, 'tsne_test.png')))
 
     # save results
     print(results)

@@ -27,13 +27,24 @@ def tsne(model, data_loader, device, plot_fn=None):
         y_array = []
         g_array = []
         for i, *atuple in enumerate(data_loader):
-            # send mini-batch to gpu
-            x = atuple[0][0].to(device)
-            y = atuple[0][1].to(device)
-            g = atuple[0][2].to(device)
 
-            # forward pass (INFERENCE: JUST ON CLASSIFIER)
-            h1, y_pred = model(x)
+            if hasattr(model, 'encoder'):
+                x = atuple[0][0].to(device)
+                y = atuple[0][1].to(device)
+                g = atuple[0][2].to(device)
+                y_2D = atuple[0][5].to(device)
+                g_2D = atuple[0][6].to(device)
+
+                # forward pass
+                h1, _ = model.encoder(x, y_2D, g_2D)
+            else:
+                # send mini-batch to gpu
+                x = atuple[0][0].to(device)
+                y = atuple[0][1].to(device)
+                g = atuple[0][2].to(device)
+
+                # forward pass (INFERENCE: JUST ON CLASSIFIER)
+                h1, _ = model(x)
 
             # concat data
             if i == 0:
