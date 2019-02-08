@@ -133,7 +133,7 @@ class CelebA(Dataset):
 
 class KinectLeap(Dataset):
     def __init__(self,
-                 data_fn='/data/DB/kinect_leap_dataset_signer_independent/',
+                 data_fn='/home/dpernes/dataserver/DB/kinect_leap_dataset_signer_independent/',
                  n_person=14,
                  n_gesture=10,
                  n_repetions=10,

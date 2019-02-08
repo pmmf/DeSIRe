@@ -35,91 +35,12 @@ TWINS_REG = 0.01
 CVAE_WEIGHT = 0.1
 KL_WEIGHT = 8e-02
 IM_SIZE = (3, 100, 100)
-EPOCHS = 150
+EPOCHS = 10
 ATR_LABEL = 5
 ATR_ID = 9 + 10
 DATASET_SIZE = {'staticSL': KinectLeap}
 SPLITS = 5
 MODE = 'groups'
-
-
-def save_twins_plots(model, data_loader, device, plot_fn):
-    with torch.no_grad():  # we do not need gradients
-        model.eval()
-
-        (x, y, _, y_1D, _, y_2D, g_2D,
-            x_decoder, _, g_decoder_1D,
-            x2, _, g2_2D) = list(data_loader)[0]
-
-        # send mini-batch to gpu
-        x = x.to(device)
-        y = y.to(device)
-        # g = g.to(device)
-        y_1D = y_1D.to(device)
-        # g_1D = g_1D.to(device)
-        y_2D = y_2D.to(device)
-        g_2D = g_2D.to(device)
-        x_decoder = x_decoder.to(device)
-        # g_decoder = g_decoder.to(device)
-        g_decoder_1D = g_decoder_1D.to(device)
-        x2 = x2.to(device)
-        # g2 = g2.to(device)
-        g2_2D = g2_2D.to(device)
-
-        # encoding decoding
-        for pi, p_id in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13]):
-            ggg = torch.zeros(BATCH_SIZE, 11).to(device)
-            ggg[:, pi] = 1
-            z_mean, z_log_var = model.cvae.encoder(x, y_2D, g_2D)
-            x_rec = model.cvae.decoder(z_mean, y_1D, ggg)
-            org_images = merge_images(inverse_transform(x.detach()), (4, 8))
-            rec_images = merge_images(inverse_transform(x_rec.detach()), (4, 8))
-            # var.detach().numpy()
-            plt.figure()
-            plt.subplot(121)
-            plt.imshow(org_images)
-            plt.axis('off')
-            plt.subplot(122)
-            plt.imshow(rec_images)
-            plt.axis('off')
-            plt.show()
-            plt.savefig(os.path.join(*(plot_fn, 'twins_enc_dec' + str(p_id) + '.png')))  # save the figure to file
-            plt.close()
-
-        # reconstructions
-        (x_reconst, z_mean, z_log_var,
-            z_mean2, z_log_var2,
-            h1, y_pred) = model(x, y, y_1D, g_decoder_1D, y_2D, g_2D,
-                                x2, g2_2D)
-
-        org_images = merge_images(inverse_transform(x.detach()), (4, 8))
-        rec_images = merge_images(inverse_transform(x_reconst.detach()), (4, 8))
-        # var.detach().numpy()
-        plt.figure()
-        plt.subplot(121)
-        plt.imshow(org_images)
-        plt.axis('off')
-        plt.subplot(122)
-        plt.imshow(rec_images)
-        plt.axis('off')
-        plt.show()
-        plt.savefig(os.path.join(*(plot_fn, 'twins_rec.png')))  # save the figure to file
-        plt.close()
-
-        # new examples
-        z = torch.randn(BATCH_SIZE, 128).to(device)
-        yyy = torch.zeros(BATCH_SIZE, 10).to(device)
-        ggg = torch.zeros(BATCH_SIZE, 11).to(device)
-        yyy[:, ATR_LABEL] = 1
-        ggg[:, 10] = 1
-        new_rec = model.cvae.decoder(z, yyy, ggg)
-        new_images = merge_images(inverse_transform(new_rec.detach()), (4, 8))
-        plt.figure()
-        plt.imshow(new_images)
-        plt.axis('off')
-        plt.show()
-        plt.savefig(os.path.join(*(plot_fn, 'twins_new.png')))  # save the figure to file
-        plt.close()
 
 
 def plot_train_history(train_history, basedir='.'):
@@ -130,7 +51,7 @@ def plot_train_history(train_history, basedir='.'):
     x = range(epochs)
 
     # training loss (total loss)
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.plot(x, train_history['loss_tr'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('Total train loss')
@@ -138,7 +59,7 @@ def plot_train_history(train_history, basedir='.'):
     plt.savefig(os.path.join(basedir, 'train_loss.png'))
 
     # classification accuracies and losses
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.subplot(311)
     plt.plot(x, train_history['class_loss_tr'], 'r-')
     plt.plot(x, train_history['class_loss_val'], 'g-')
@@ -163,7 +84,7 @@ def plot_train_history(train_history, basedir='.'):
     plt.savefig(os.path.join(basedir, 'classif_loss.png'))
 
     # embedding regularization loss
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.plot(x, train_history['emb_loss'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('Embedding loss')
@@ -171,28 +92,24 @@ def plot_train_history(train_history, basedir='.'):
     plt.savefig(os.path.join(basedir, 'emb_loss.png'))
 
     # CVAE losses
-    plt.figure()
-    plt.subplot(411)
+    plt.figure(figsize=(20, 20))
+    plt.subplot(311)
     plt.plot(x, train_history['cvae_loss'], 'b-')
     plt.plot(x, train_history['cvae_reconst'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('CVAE losses')
-    plt.legend(['total', 'reconst', 'kl prior', 'kl_ids'])
+    plt.legend(['kl prior', 'kl_ids'])
     plt.axis([0, epochs, 0, max(train_history['cvae_loss'])])
 
-    plt.subplot(412)
+    plt.subplot(312)
+    plt.plot(x, train_history['cvae_kl_prior'], 'r-')
     plt.plot(x, train_history['cvae_kl_ids'], 'g-')
     plt.xlabel('Epoch')
-    plt.ylabel('KL ids loss')
+    plt.ylabel('KL losses')
+    plt.legend(['kl prior', 'kl_ids'])
     plt.axis([0, epochs, 0, max(train_history['cvae_kl_ids'])])
 
-    plt.subplot(413)
-    plt.plot(x, train_history['cvae_kl_prior'], 'g-')
-    plt.xlabel('Epoch')
-    plt.ylabel('KL prior loss')
-    plt.axis([0, epochs, 0, max(train_history['cvae_kl_prior'])])
-
-    plt.subplot(414)
+    plt.subplot(313)
     plt.plot(x, train_history['kl_w'], 'b-')
     plt.xlabel('Epoch')
     plt.ylabel('KL prior weight')

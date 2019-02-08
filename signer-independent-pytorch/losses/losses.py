@@ -40,7 +40,7 @@ def twins_loss(x, y,
                kl_weight=1e-03,
                cvae_weight=1e-03,
                class_weight=1,
-               t_reg=1e-03):
+               emb_weight=1e-03):
 
     # CVAE loss
     (cvae_loss,
