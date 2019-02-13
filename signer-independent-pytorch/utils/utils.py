@@ -12,7 +12,7 @@ import copy
 
 
 def tsne(model, data_loader, device, plot_fn=None):
-    markers = ['.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', '8', 's', 'p']
+    markers = ['.', 'v', '1', 'p', 'P', '*', 'X', '8', '+', 'x', 'd', '|', 's', '>']
     colors = ['black', 'red', 'blue', 'green', 'orange', 'fuchsia', 'lime', 'peru', 'cyan', 'rosybrown']
 
     from sklearn import manifold
@@ -27,13 +27,24 @@ def tsne(model, data_loader, device, plot_fn=None):
         y_array = []
         g_array = []
         for i, *atuple in enumerate(data_loader):
-            # send mini-batch to gpu
-            x = atuple[0][0].to(device)
-            y = atuple[0][1].to(device)
-            g = atuple[0][2].to(device)
 
-            # forward pass (INFERENCE: JUST ON CLASSIFIER)
-            h1, y_pred = model(x)
+            if hasattr(model, 'encoder'):
+                x = atuple[0][0].to(device)
+                y = atuple[0][1].to(device)
+                g = atuple[0][2].to(device)
+                y_2D = atuple[0][5].to(device)
+                g_2D = atuple[0][6].to(device)
+
+                # forward pass
+                h1, _ = model.encoder(x, y_2D, g_2D)
+            else:
+                # send mini-batch to gpu
+                x = atuple[0][0].to(device)
+                y = atuple[0][1].to(device)
+                g = atuple[0][2].to(device)
+
+                # forward pass (INFERENCE: JUST ON CLASSIFIER)
+                h1, _ = model(x)
 
             # concat data
             if i == 0:
@@ -51,6 +62,13 @@ def tsne(model, data_loader, device, plot_fn=None):
     g_array = g_array.to('cpu').numpy()
 
     X_tsne = tsne.fit_transform(x_array)
+
+    g_set = np.unique(g_array)
+    g_choice = np.random.choice(g_set, size=2, replace=False)
+    mask = np.logical_or((g_array == g_choice[0]), (g_array == g_choice[1]))
+    g_array = g_array[mask]
+    X_tsne = X_tsne[mask]
+    y_array = y_array[mask]
 
     plt.figure()
     for i in range(X_tsne.shape[0]):

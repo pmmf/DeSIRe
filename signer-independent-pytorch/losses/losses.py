@@ -37,30 +37,34 @@ def twins_loss(x, y,
                x_reconst, z_mean, z_log_var, z,
                z_mean2, z_log_var2,
                h1, y_pred,
-               kl_weight=1e-03,
+               kl_prior_weight=1e-03,
+               kl_ids_weight=1e-03,
                cvae_weight=1e-03,
                class_weight=1,
-               t_reg=1e-03):
+               emb_weight=1e-03):
 
     # CVAE loss
     (cvae_loss,
      cvae_reconst_loss,
      cvae_kl_prior) = vae_loss(x, x_reconst, z_mean, z_log_var,
-                               kl_weight=kl_weight)
+                               kl_weight=kl_prior_weight)
 
     cvae_kl_ids = torch.mean(kl_div(z_mean, z_log_var, z_mean2, z_log_var2),
                              dim=0)
 
-    cvae_loss += kl_weight*cvae_kl_ids
+    cvae_loss += kl_ids_weight*cvae_kl_ids
 
     # classification loss
     class_loss = cross_entropy_loss(y_pred, y)
 
     # classification embeddings loss
-    class_emb_loss = torch.mean((z.detach() - h1)**2)
+    if class_weight < emb_weight:
+        class_emb_loss = torch.mean((z.detach() - h1)**2)
+    else:
+        class_emb_loss = torch.mean((z - h1)**2)
 
     # total loss
-    loss = cvae_weight*cvae_loss + class_weight*class_loss + t_reg*class_emb_loss
+    loss = class_weight*class_loss + emb_weight*class_emb_loss + cvae_weight*cvae_loss
 
     return loss, cvae_loss, cvae_reconst_loss, cvae_kl_prior, cvae_kl_ids, class_loss, class_emb_loss
 

@@ -28,12 +28,16 @@ import pickle
 MODEL_LIST = {'twins': TWINS}
 DATASETS_LIST = {'celeba': CelebA, 'staticSL': KinectLeap}
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-04
-CNN_WEIGHT = 1
-L2_REG = 1e-05
-TWINS_REG = 0.01
+LEARNING_RATE = 1e-4
+CLASS_WEIGHT = 1.
+L2_REG = 0.
+EMB_WEIGHT = 0.1
 CVAE_WEIGHT = 0.1
-KL_WEIGHT = 8e-02
+KL_PRIOR_WEIGHT = 8e-02
+KL_IDS_WEIGHT = 8e-02
+CLASS_START = 75
+KL_START = 30
+ANNEAL_SLOPE = 2.5e-4
 IM_SIZE = (3, 100, 100)
 EPOCHS = 150
 ATR_LABEL = 5
@@ -41,85 +45,6 @@ ATR_ID = 9 + 10
 DATASET_SIZE = {'staticSL': KinectLeap}
 SPLITS = 5
 MODE = 'groups'
-
-
-def save_twins_plots(model, data_loader, device, plot_fn):
-    with torch.no_grad():  # we do not need gradients
-        model.eval()
-
-        (x, y, _, y_1D, _, y_2D, g_2D,
-            x_decoder, _, g_decoder_1D,
-            x2, _, g2_2D) = list(data_loader)[0]
-
-        # send mini-batch to gpu
-        x = x.to(device)
-        y = y.to(device)
-        # g = g.to(device)
-        y_1D = y_1D.to(device)
-        # g_1D = g_1D.to(device)
-        y_2D = y_2D.to(device)
-        g_2D = g_2D.to(device)
-        x_decoder = x_decoder.to(device)
-        # g_decoder = g_decoder.to(device)
-        g_decoder_1D = g_decoder_1D.to(device)
-        x2 = x2.to(device)
-        # g2 = g2.to(device)
-        g2_2D = g2_2D.to(device)
-
-        # encoding decoding
-        for pi, p_id in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13]):
-            ggg = torch.zeros(BATCH_SIZE, 11).to(device)
-            ggg[:, pi] = 1
-            z_mean, z_log_var = model.cvae.encoder(x, y_2D, g_2D)
-            x_rec = model.cvae.decoder(z_mean, y_1D, ggg)
-            org_images = merge_images(inverse_transform(x.detach()), (4, 8))
-            rec_images = merge_images(inverse_transform(x_rec.detach()), (4, 8))
-            # var.detach().numpy()
-            plt.figure()
-            plt.subplot(121)
-            plt.imshow(org_images)
-            plt.axis('off')
-            plt.subplot(122)
-            plt.imshow(rec_images)
-            plt.axis('off')
-            plt.show()
-            plt.savefig(os.path.join(*(plot_fn, 'twins_enc_dec' + str(p_id) + '.png')))  # save the figure to file
-            plt.close()
-
-        # reconstructions
-        (x_reconst, z_mean, z_log_var,
-            z_mean2, z_log_var2,
-            h1, y_pred) = model(x, y, y_1D, g_decoder_1D, y_2D, g_2D,
-                                x2, g2_2D)
-
-        org_images = merge_images(inverse_transform(x.detach()), (4, 8))
-        rec_images = merge_images(inverse_transform(x_reconst.detach()), (4, 8))
-        # var.detach().numpy()
-        plt.figure()
-        plt.subplot(121)
-        plt.imshow(org_images)
-        plt.axis('off')
-        plt.subplot(122)
-        plt.imshow(rec_images)
-        plt.axis('off')
-        plt.show()
-        plt.savefig(os.path.join(*(plot_fn, 'twins_rec.png')))  # save the figure to file
-        plt.close()
-
-        # new examples
-        z = torch.randn(BATCH_SIZE, 128).to(device)
-        yyy = torch.zeros(BATCH_SIZE, 10).to(device)
-        ggg = torch.zeros(BATCH_SIZE, 11).to(device)
-        yyy[:, ATR_LABEL] = 1
-        ggg[:, 10] = 1
-        new_rec = model.cvae.decoder(z, yyy, ggg)
-        new_images = merge_images(inverse_transform(new_rec.detach()), (4, 8))
-        plt.figure()
-        plt.imshow(new_images)
-        plt.axis('off')
-        plt.show()
-        plt.savefig(os.path.join(*(plot_fn, 'twins_new.png')))  # save the figure to file
-        plt.close()
 
 
 def plot_train_history(train_history, basedir='.'):
@@ -130,30 +55,32 @@ def plot_train_history(train_history, basedir='.'):
     x = range(epochs)
 
     # training loss (total loss)
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.plot(x, train_history['loss_tr'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('Total train loss')
-    plt.axis([0, epochs, 0, max(train_history['loss_tr'])])
+    plt.axis([0, epochs, 0, 3])
     plt.savefig(os.path.join(basedir, 'train_loss.png'))
 
     # classification accuracies and losses
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.subplot(311)
     plt.plot(x, train_history['class_loss_tr'], 'r-')
     plt.plot(x, train_history['class_loss_val'], 'g-')
+    plt.plot(x, train_history['class_loss_test'], 'b-')
     plt.plot(best_val_epoch, best_val_loss, 'bx')
     plt.xlabel('Epoch')
     plt.ylabel('Classif. loss')
-    plt.legend(['train', 'valid'])
-    plt.axis([0, epochs, 0, max(train_history['class_loss_tr'])])
+    plt.legend(['train', 'valid', 'test'])
+    plt.axis([0, epochs, 0, 3])
     plt.subplot(312)
     plt.plot(x, train_history['acc_tr'], 'r-')
     plt.plot(x, train_history['acc_val'], 'g-')
+    plt.plot(x, train_history['acc_test'], 'b-')
     plt.plot(best_val_epoch, best_val_acc, 'bx')
     plt.xlabel('Epoch')
     plt.ylabel('Classif. accuracy')
-    plt.legend(['train', 'val'])
+    plt.legend(['train', 'val', 'test'])
     plt.axis([0, epochs, 0, 1])
     plt.subplot(313)
     plt.plot(x, train_history['class_w'], 'b-')
@@ -162,37 +89,41 @@ def plot_train_history(train_history, basedir='.'):
     plt.axis([0, epochs, 0, max(train_history['class_w'])])
     plt.savefig(os.path.join(basedir, 'classif_loss.png'))
 
+    # l2 regularization loss
+    plt.figure(figsize=(20, 20))
+    plt.plot(x, train_history['l2norm'], 'r-')
+    plt.xlabel('Epoch')
+    plt.ylabel('||W||^2')
+    plt.axis([0, epochs, 0, max(train_history['l2norm'])])
+    plt.savefig(os.path.join(basedir, 'l2reg.png'))
+
     # embedding regularization loss
-    plt.figure()
+    plt.figure(figsize=(20, 20))
     plt.plot(x, train_history['emb_loss'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('Embedding loss')
-    plt.axis([0, epochs, 0, max(train_history['emb_loss'])])
+    plt.axis([0, epochs, 0, 3])
     plt.savefig(os.path.join(basedir, 'emb_loss.png'))
 
     # CVAE losses
-    plt.figure()
-    plt.subplot(411)
+    plt.figure(figsize=(20, 20))
+    plt.subplot(311)
     plt.plot(x, train_history['cvae_loss'], 'b-')
     plt.plot(x, train_history['cvae_reconst'], 'r-')
     plt.xlabel('Epoch')
     plt.ylabel('CVAE losses')
-    plt.legend(['total', 'reconst', 'kl prior', 'kl_ids'])
-    plt.axis([0, epochs, 0, max(train_history['cvae_loss'])])
+    plt.legend(['total loss', 'reconst loss'])
+    plt.axis([0, epochs, 0, 3])
 
-    plt.subplot(412)
+    plt.subplot(312)
+    plt.plot(x, train_history['cvae_kl_prior'], 'r-')
     plt.plot(x, train_history['cvae_kl_ids'], 'g-')
     plt.xlabel('Epoch')
-    plt.ylabel('KL ids loss')
-    plt.axis([0, epochs, 0, max(train_history['cvae_kl_ids'])])
+    plt.ylabel('KL losses')
+    plt.legend(['kl prior', 'kl_ids'])
+    plt.axis([0, epochs, 0, 3])
 
-    plt.subplot(413)
-    plt.plot(x, train_history['cvae_kl_prior'], 'g-')
-    plt.xlabel('Epoch')
-    plt.ylabel('KL prior loss')
-    plt.axis([0, epochs, 0, max(train_history['cvae_kl_prior'])])
-
-    plt.subplot(414)
+    plt.subplot(313)
     plt.plot(x, train_history['kl_w'], 'b-')
     plt.xlabel('Epoch')
     plt.ylabel('KL prior weight')
@@ -201,10 +132,11 @@ def plot_train_history(train_history, basedir='.'):
 
 
 def fit(model, data, device, output):
-    global CNN_W_ANNEAL, KL_W_ANNEAL
+    global CLASS_W_ANNEAL, KL_PRIOR_W_ANNEAL, KL_IDS_W_ANNEAL
 
     # train and validation loaders
-    train_loader, valid_loader = data
+    # train_loader, valid_loader = data
+    train_loader, valid_loader, test_loader = data  # TO BE REMOVED!
     print("Train/Val batches: {}/{}".format(len(train_loader),
                                             len(valid_loader)))
 
@@ -221,7 +153,8 @@ def fit(model, data, device, output):
                      'reg_tr': [], 'class_loss_tr': [],
                      'emb_loss': [], 'acc_tr': [],
                      'class_loss_val': [], 'acc_val': [],
-                     'class_w': [], 'kl_w': []}
+                     'class_loss_test': [], 'acc_test': [],  # TO BE REMOVED!
+                     'l2norm': [], 'class_w': [], 'kl_w': []}
 
     # Best validation params
     best_val = float('inf')
@@ -263,16 +196,21 @@ def fit(model, data, device, output):
                                  x2, g2_2D)
 
             # weight annealing
-            x0 = 75 * len(train_loader) * BATCH_SIZE
-            CNN_W_ANNEAL = annealing_function(init_weight=CNN_WEIGHT,
-                                              ftype='exponential',
-                                              step=step, k=0.0025,
-                                              x0=x0)
-            x0 = 30 * len(train_loader) * BATCH_SIZE
-            KL_W_ANNEAL = annealing_function(init_weight=KL_WEIGHT,
-                                             ftype='exponential',
-                                             step=step, k=0.0025,
-                                             x0=x0)
+            x0 = CLASS_START * len(train_loader) * BATCH_SIZE
+            CLASS_W_ANNEAL = annealing_function(init_weight=CLASS_WEIGHT,
+                                                ftype='exponential',
+                                                step=step, k=ANNEAL_SLOPE,
+                                                x0=x0)
+
+            x0 = KL_START * len(train_loader) * BATCH_SIZE
+            KL_PRIOR_W_ANNEAL = annealing_function(init_weight=KL_PRIOR_WEIGHT,
+                                                   ftype='exponential',
+                                                   step=step, k=ANNEAL_SLOPE,
+                                                   x0=x0)
+            KL_IDS_W_ANNEAL = annealing_function(init_weight=KL_IDS_WEIGHT,
+                                                 ftype='exponential',
+                                                 step=step, k=ANNEAL_SLOPE,
+                                                 x0=x0)
             # Compute twins loss
             (loss,
              cvae_loss, cvae_reconst_loss, cvae_kl_prior, cvae_kl_ids,
@@ -280,10 +218,11 @@ def fit(model, data, device, output):
                                                 x_reconst, z_mean, z_log_var, z,
                                                 z_mean2, z_log_var2,
                                                 h1, y_pred,
-                                                kl_weight=KL_W_ANNEAL,
+                                                kl_prior_weight=KL_PRIOR_W_ANNEAL,
+                                                kl_ids_weight=KL_IDS_W_ANNEAL,
                                                 cvae_weight=CVAE_WEIGHT,
-                                                class_weight=CNN_W_ANNEAL,
-                                                t_reg=TWINS_REG)
+                                                class_weight=CLASS_W_ANNEAL,
+                                                emb_weight=EMB_WEIGHT)
 
             # Backprop and optimize
             optimizer.zero_grad()  # clear previous gradients
@@ -319,8 +258,13 @@ def fit(model, data, device, output):
         train_history['emb_loss'].append(emb_loss.item())
         train_history['acc_tr'].append(acc_tr)
 
-        train_history['class_w'].append(CNN_W_ANNEAL)
-        train_history['kl_w'].append(KL_W_ANNEAL)
+        l2norm = 0.
+        for param in model.cnn.parameters():
+            l2norm += torch.mean(param**2).item()
+        train_history['l2norm'].append(l2norm)
+
+        train_history['class_w'].append(CLASS_W_ANNEAL)
+        train_history['kl_w'].append(KL_PRIOR_W_ANNEAL)
 
         # print('VALIDATION')
         class_loss_val, acc_val = valid_eval(model, valid_loader, device)
@@ -331,11 +275,11 @@ def fit(model, data, device, output):
         # train_history['reg_val'].append(reg_val)
         train_history['acc_val'].append(acc_val)
 
-        # save best validation model
-        if best_val > class_loss_val:
-            torch.save(model.state_dict(), os.path.join(*(output, 'twins.pth')))
-            best_val = class_loss_val
-            best_epoch = epoch
+        # # save best validation model
+        # if best_val > class_loss_val:
+        #     torch.save(model.state_dict(), os.path.join(*(output, 'twins.pth')))
+        #     best_val = class_loss_val
+        #     best_epoch = epoch
 
         # display the training loss
         print()
@@ -348,16 +292,24 @@ def fit(model, data, device, output):
         print('>> Valid loss: {:.5f} |'.format(class_loss_val.item()) +
               ' cvae loss: {} |'.format('-') +
               ' class loss: {:.5f} |'.format(class_loss_val.item()) +
-              ' reg loss: {} |'.format('-') +
+              ' emb loss: {} |'.format('-') +
               ' acc: {:.5f}'.format(acc_val))
-        print('>> WEIGHTS - KL:{:.5f}/CVAE:{:.5f}/CNN:{:.5f}/TWINS_REG:{:.5f}'.format(KL_W_ANNEAL,
-              CVAE_WEIGHT, CNN_W_ANNEAL, TWINS_REG))
+        print('>> WEIGHTS - KL:{:.5f}/CVAE:{:.5f}/CLASS:{:.5f}/EMB:{:.5f}'.format(KL_PRIOR_W_ANNEAL,
+              CVAE_WEIGHT, CLASS_W_ANNEAL, EMB_WEIGHT))
         print('>> Best model: {}/{:.5f}'.format(best_epoch+1, best_val))
         print()
+
+        ### TO BE REMOVED!!!! ####
+        class_loss_test, acc_test = valid_eval(model, test_loader, device)
+        train_history['class_loss_test'].append(class_loss_test.item())
+        train_history['acc_test'].append(acc_test)
 
     # save train/valid history
     # plot_fn = os.path.join(*(output, 'cnn_history.png'))
     # save_twins_plots(model, train_loader, device, output)
+
+    # save the model
+    torch.save(model.state_dict(), os.path.join(*(output, 'twins.pth')))
 
     # make training plots (losses, accuracies, etc)
     plot_train_history(train_history, basedir=output)
@@ -369,7 +321,7 @@ def fit(model, data, device, output):
 
 
 def valid_eval(model, data_loader, device):
-    global CNN_W_ANNEAL, KL_W_ANNEAL
+    global CLASS_W_ANNEAL, KL_PRIOR_W_ANNEAL, KL_IDS_W_ANNEAL
 
     with torch.no_grad():
         # set model to train
@@ -405,7 +357,7 @@ def valid_eval(model, data_loader, device):
 
 
 def train_eval(model, data_loader, device):
-    global CNN_W_ANNEAL, KL_W_ANNEAL
+    global CLASS_W_ANNEAL, KL_PRIOR_W_ANNEAL, KL_IDS_W_ANNEAL
 
     with torch.no_grad():
         # set model to train
@@ -451,10 +403,11 @@ def train_eval(model, data_loader, device):
                                                 x_reconst, z_mean, z_log_var, z,
                                                 z_mean2, z_log_var2,
                                                 h1, y_pred,
-                                                kl_weight=KL_W_ANNEAL,
+                                                kl_prior_weight=KL_PRIOR_W_ANNEAL,
+                                                kl_ids_weight=KL_IDS_W_ANNEAL,
                                                 cvae_weight=CVAE_WEIGHT,
-                                                class_weight=CNN_W_ANNEAL,
-                                                t_reg=TWINS_REG)
+                                                class_weight=CLASS_W_ANNEAL,
+                                                emb_weight=EMB_WEIGHT)
 
             # Acumulate mini-batches losses
             loss_eval += loss * x.shape[0]
@@ -484,6 +437,8 @@ def train_eval(model, data_loader, device):
 
 
 def main():
+    global EPOCHS
+
     # set random seed
     np.random.seed(42)
     torch.manual_seed(42)
@@ -520,6 +475,9 @@ def main():
     split = 0
 
     for split, (tr_indexes, test_indexes) in enumerate(dataSplitter):
+        if split != 2:
+            continue
+
         output_fn = os.path.join(args.output, 'split_' + str(split))
 
         if not os.path.isdir(output_fn):
@@ -544,7 +502,8 @@ def main():
         if args.mode == 'train':
             # Fit model
             model, _, valid_loader = fit(model=model,
-                                         data=(train_loader, valid_loader),
+                                         # data=(train_loader, valid_loader),
+                                         data=(train_loader, valid_loader, test_loader), ## TO BE REMOVED!
                                          device=device,
                                          output=output_fn)
         elif args.mode == 'test':
@@ -559,8 +518,14 @@ def main():
         results.append((test_loss.item(), test_acc))
 
         # TSNE maps
+        # on train
+        tsne(model.cvae, train_loader, device,
+             plot_fn=os.path.join(*(output_fn, 'tsne_cvae_train.png')))
+        tsne(model.cnn, train_loader, device,
+             plot_fn=os.path.join(*(output_fn, 'tsne_train.png')))
+        # on test
         tsne(model.cnn, test_loader, device,
-             plot_fn=os.path.join(*(output_fn, 'tsne.png')))
+             plot_fn=os.path.join(*(output_fn, 'tsne_test.png')))
 
     # save results
     print(results)
