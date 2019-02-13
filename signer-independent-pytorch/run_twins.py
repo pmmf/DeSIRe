@@ -39,7 +39,7 @@ CLASS_START = 75
 KL_START = 30
 ANNEAL_SLOPE = 2.5e-4
 IM_SIZE = (3, 100, 100)
-EPOCHS = 150
+EPOCHS = 10
 ATR_LABEL = 5
 ATR_ID = 9 + 10
 DATASET_SIZE = {'staticSL': KinectLeap}
@@ -135,8 +135,7 @@ def fit(model, data, device, output):
     global CLASS_W_ANNEAL, KL_PRIOR_W_ANNEAL, KL_IDS_W_ANNEAL
 
     # train and validation loaders
-    # train_loader, valid_loader = data
-    train_loader, valid_loader, test_loader = data  # TO BE REMOVED!
+    train_loader, valid_loader = data
     print("Train/Val batches: {}/{}".format(len(train_loader),
                                             len(valid_loader)))
 
@@ -153,7 +152,6 @@ def fit(model, data, device, output):
                      'reg_tr': [], 'class_loss_tr': [],
                      'emb_loss': [], 'acc_tr': [],
                      'class_loss_val': [], 'acc_val': [],
-                     'class_loss_test': [], 'acc_test': [],  # TO BE REMOVED!
                      'l2norm': [], 'class_w': [], 'kl_w': []}
 
     # Best validation params
@@ -298,11 +296,6 @@ def fit(model, data, device, output):
               CVAE_WEIGHT, CLASS_W_ANNEAL, EMB_WEIGHT))
         print('>> Best model: {}/{:.5f}'.format(best_epoch+1, best_val))
         print()
-
-        ### TO BE REMOVED!!!! ####
-        class_loss_test, acc_test = valid_eval(model, test_loader, device)
-        train_history['class_loss_test'].append(class_loss_test.item())
-        train_history['acc_test'].append(acc_test)
 
     # save train/valid history
     # plot_fn = os.path.join(*(output, 'cnn_history.png'))
@@ -475,15 +468,10 @@ def main():
     split = 0
 
     for split, (tr_indexes, test_indexes) in enumerate(dataSplitter):
-        if split != 2:
-            continue
-
         output_fn = os.path.join(args.output, 'split_' + str(split))
 
         if not os.path.isdir(output_fn):
             os.mkdir(output_fn)
-
-        print('Split', split)
 
         # split data
         (train_loader,
@@ -502,8 +490,7 @@ def main():
         if args.mode == 'train':
             # Fit model
             model, _, valid_loader = fit(model=model,
-                                         # data=(train_loader, valid_loader),
-                                         data=(train_loader, valid_loader, test_loader), ## TO BE REMOVED!
+                                         data=(train_loader, valid_loader),
                                          device=device,
                                          output=output_fn)
         elif args.mode == 'test':
