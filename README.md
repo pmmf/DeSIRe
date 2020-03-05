@@ -6,7 +6,7 @@ Source code for the implementation of **DeSIRe**, a novel deep neural network th
 
 P. M. Ferreira, D. Pernes, A. Rebelo and J. S. Cardoso, "**[DeSIRe: Deep Signer-Invariant Representations for Sign Language Recognition](https://ieeexplore.ieee.org/abstract/document/8937777)**", *in IEEE Transactions on Systems, Man, and Cybernetics: Systems*. doi: 10.1109/TSMC.2019.2957347
 
-| [![page1](./imgs/signer_invariant_nn.png)](https://github.com/pmmf/CorSiL/blob/master/paper/CorSiL_paper.pdf)  |
+| [![page1](./imgs/DeSIRe.png)](https://ieeexplore.ieee.org/abstract/document/8937777)  |
 |:---:|
 
 ## Example of Usage
